@@ -1,0 +1,102 @@
+// src/app/api/checkout/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { stripe } from "@/lib/stripe";
+import { createServerClientWithCookies } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+
+export const runtime = "nodejs"; // ensure Node runtime (not Edge)
+
+type Body = {
+  priceId: string;
+  mode?: "subscription" | "payment";
+};
+
+async function getOrCreateCustomer({
+  userId,
+  email,
+}: {
+  userId: string;
+  email: string | null;
+}) {
+  // Read (and possibly update) via RLS-enabled user client
+  const supabase = await createServerClientWithCookies();
+
+  // 1) Read existing customer id
+  const { data: profile, error: readErr } = await supabase
+    .from("stripe_step_by_step_profiles")
+    .select("stripe_customer_id")
+    .eq("id", userId)
+    .single();
+
+  // If profile exists and has customer ID, return it
+  if (!readErr && profile?.stripe_customer_id) {
+    return profile.stripe_customer_id as string;
+  }
+
+  // 2) Create in Stripe
+  const customer = await stripe.customers.create({
+    email: email ?? undefined,
+    metadata: { supabase_user_id: userId },
+  });
+
+  // 3) Upsert to profiles table using admin client (bypasses RLS)
+  const { error: upsertErr } = await supabaseAdmin
+    .from("stripe_step_by_step_profiles")
+    .upsert({
+      id: userId,
+      stripe_customer_id: customer.id,
+      billing_email: email,
+      subscription_status: null,
+      subscription_price_id: null,
+      subscription_current_period_end: null,
+    });
+
+  if (upsertErr) throw upsertErr;
+  return customer.id;
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const supabase = await createServerClientWithCookies();
+
+    // Auth check
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { priceId, mode = "subscription" } = (await req.json()) as Body;
+    if (!priceId) {
+      return NextResponse.json({ error: "Missing priceId" }, { status: 400 });
+    }
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+    // Ensure we have a Stripe customer for this user
+    const customerId = await getOrCreateCustomer({
+      userId: user.id,
+      email: user.email ?? null,
+    });
+
+    // Create Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      mode, // "subscription" | "payment"
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${siteUrl}/billing?status=success`,
+      cancel_url: `${siteUrl}/billing?status=cancelled`,
+      allow_promotion_codes: true,
+      billing_address_collection: "auto",
+      // automatic_tax: { enabled: true }, // enable later if you need Stripe Tax
+    });
+    return NextResponse.json({ url: session.url });
+  } catch (err: unknown) {
+    console.error("[/api/checkout] error:", err);
+    return NextResponse.json(
+      { error: "Failed to create checkout" },
+      { status: 500 }
+    );
+  }
+}
