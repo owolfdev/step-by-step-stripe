@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createServerClientWithCookies } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { logger, createLogContext } from "@/lib/logging";
 
 export const runtime = "nodejs"; // ensure Node runtime (not Edge)
 
@@ -57,6 +58,8 @@ async function getOrCreateCustomer({
 
 export async function POST(req: NextRequest) {
   try {
+    logger.apiRequest("POST", "/api/checkout", { operation: "checkout_start" });
+
     const supabase = await createServerClientWithCookies();
 
     // Auth check
@@ -64,13 +67,33 @@ export async function POST(req: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
+      logger.warn("Unauthorized checkout attempt", {
+        operation: "checkout_auth",
+      });
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { priceId, mode = "subscription" } = (await req.json()) as Body;
     if (!priceId) {
+      logger.warn(
+        "Missing priceId in checkout request",
+        createLogContext({
+          userId: user.id,
+          operation: "checkout_validation",
+        })
+      );
       return NextResponse.json({ error: "Missing priceId" }, { status: 400 });
     }
+
+    logger.info(
+      "Creating checkout session",
+      createLogContext({
+        userId: user.id,
+        priceId,
+        mode,
+        operation: "checkout_creation",
+      })
+    );
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -79,6 +102,15 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       email: user.email ?? null,
     });
+
+    logger.info(
+      "Customer ID obtained/created",
+      createLogContext({
+        userId: user.id,
+        stripeCustomerId: customerId,
+        operation: "customer_creation",
+      })
+    );
 
     // Create Checkout Session
     const session = await stripe.checkout.sessions.create({
@@ -91,9 +123,25 @@ export async function POST(req: NextRequest) {
       billing_address_collection: "auto",
       // automatic_tax: { enabled: true }, // enable later if you need Stripe Tax
     });
+
+    logger.stripeOperation(
+      "create_checkout_session",
+      session.id,
+      createLogContext({
+        userId: user.id,
+        stripeCustomerId: customerId,
+        operation: "checkout_session_created",
+        sessionId: session.id,
+        mode,
+      })
+    );
+
     return NextResponse.json({ url: session.url });
   } catch (err: unknown) {
-    console.error("[/api/checkout] error:", err);
+    const error = err instanceof Error ? err : new Error(String(err));
+    logger.apiError("POST", "/api/checkout", error, {
+      operation: "checkout_error",
+    });
     return NextResponse.json(
       { error: "Failed to create checkout" },
       { status: 500 }
