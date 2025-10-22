@@ -43,13 +43,39 @@ export default async function BillingPage() {
       </div>
     );
 
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from("stripe_step_by_step_profiles")
     .select(
       "billing_email, stripe_customer_id, subscription_status, subscription_price_id, subscription_current_period_end"
     )
     .eq("id", user.id)
     .single();
+
+  // Auto-sync subscription if we have a Stripe customer ID
+  if (profile?.stripe_customer_id) {
+    try {
+      const { forceSyncUserSubscription } = await import(
+        "@/lib/subscription-sync"
+      );
+      const syncResult = await forceSyncUserSubscription(user.id);
+
+      if (syncResult.success && syncResult.subscription) {
+        // Re-fetch the updated profile after sync
+        const { data: updatedProfile } = await supabase
+          .from("stripe_step_by_step_profiles")
+          .select(
+            "billing_email, stripe_customer_id, subscription_status, subscription_price_id, subscription_current_period_end"
+          )
+          .eq("id", user.id)
+          .single();
+
+        profile = updatedProfile;
+      }
+    } catch (error) {
+      // If sync fails, continue with existing data
+      console.warn("Auto-sync failed, using cached data:", error);
+    }
+  }
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "N/A";

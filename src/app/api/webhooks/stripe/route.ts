@@ -256,18 +256,90 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // Update subscription snapshot
+        // Update subscription snapshot - get the highest active subscription
         if (userId) {
           try {
+            // Get all active subscriptions for this customer
+            const activeSubscriptions = await stripe.subscriptions.list({
+              customer: customerId,
+              status: "active",
+              limit: 10,
+            });
+
+            let highestSubscription = sub;
+            let highestTier = "free";
+
+            if (activeSubscriptions.data.length > 0) {
+              // Find the highest tier subscription
+              const subscriptionTiers = activeSubscriptions.data.map((s) => ({
+                subscription: s,
+                tier: s.items?.data?.[0]?.price?.id || null,
+              }));
+
+              // Sort by tier priority and get the highest
+              const sortedSubscriptions = subscriptionTiers.sort((a, b) => {
+                const tierA =
+                  a.tier === process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BABY
+                    ? "baby"
+                    : a.tier === process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PREMIUM
+                    ? "premium"
+                    : a.tier === process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO
+                    ? "pro"
+                    : "free";
+                const tierB =
+                  b.tier === process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BABY
+                    ? "baby"
+                    : b.tier === process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PREMIUM
+                    ? "premium"
+                    : b.tier === process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO
+                    ? "pro"
+                    : "free";
+
+                const priorityA =
+                  tierA === "free"
+                    ? 0
+                    : tierA === "baby"
+                    ? 1
+                    : tierA === "premium"
+                    ? 2
+                    : 3;
+                const priorityB =
+                  tierB === "free"
+                    ? 0
+                    : tierB === "baby"
+                    ? 1
+                    : tierB === "premium"
+                    ? 2
+                    : 3;
+
+                return priorityB - priorityA;
+              });
+
+              highestSubscription = sortedSubscriptions[0].subscription;
+              highestTier =
+                sortedSubscriptions[0].tier ===
+                process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BABY
+                  ? "baby"
+                  : sortedSubscriptions[0].tier ===
+                    process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PREMIUM
+                  ? "premium"
+                  : sortedSubscriptions[0].tier ===
+                    process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO
+                  ? "pro"
+                  : "free";
+            }
+
             // Extract current_period_end with proper typing
-            const currentPeriodEnd = (sub as unknown as Record<string, unknown>)
-              .current_period_end as number | undefined;
+            const currentPeriodEnd = (
+              highestSubscription as unknown as Record<string, unknown>
+            ).current_period_end as number | undefined;
 
             const { error } = await supabaseAdmin
               .from("stripe_step_by_step_profiles")
               .update({
-                subscription_status: sub.status, // 'active', 'canceled', etc.
-                subscription_price_id: sub.items?.data?.[0]?.price?.id ?? null,
+                subscription_status: highestSubscription.status, // 'active', 'canceled', etc.
+                subscription_price_id:
+                  highestSubscription.items?.data?.[0]?.price?.id ?? null,
                 subscription_current_period_end: currentPeriodEnd
                   ? new Date(currentPeriodEnd * 1000).toISOString()
                   : null,
@@ -284,19 +356,22 @@ export async function POST(req: NextRequest) {
                   userId,
                   stripeCustomerId: customerId,
                   operation: "subscription_update",
-                  subscriptionStatus: sub.status,
+                  subscriptionStatus: highestSubscription.status,
                 })
               );
             } else {
               logger.info(
-                "Successfully updated subscription",
+                "Successfully updated subscription with highest tier",
                 createLogContext({
                   stripeEventId: event.id,
                   userId,
                   stripeCustomerId: customerId,
                   operation: "subscription_update",
-                  subscriptionStatus: sub.status,
-                  subscriptionPriceId: sub.items?.data?.[0]?.price?.id,
+                  subscriptionStatus: highestSubscription.status,
+                  subscriptionPriceId:
+                    highestSubscription.items?.data?.[0]?.price?.id,
+                  highestTier,
+                  activeSubscriptionsCount: activeSubscriptions.data.length,
                 })
               );
             }

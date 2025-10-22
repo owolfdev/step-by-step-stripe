@@ -1,4 +1,7 @@
 import { createServerClientWithCookies } from "@/lib/supabase/server";
+import { getSubscriptionInfo, getEducationalMessage } from "@/lib/subscription";
+import SubscriptionBadge from "@/components/subscription-badge";
+import FeatureCards from "@/components/feature-cards";
 import Link from "next/link";
 
 export default async function DashboardPage() {
@@ -53,15 +56,88 @@ export default async function DashboardPage() {
     .eq("id", user.id)
     .single();
 
+  // Get subscription info
+  let subscription = getSubscriptionInfo(
+    profile || {
+      subscription_status: null,
+      subscription_price_id: null,
+      subscription_current_period_end: null,
+    }
+  );
+
+  // Auto-sync subscription if we have a Stripe customer ID
+  if (profile?.stripe_customer_id) {
+    try {
+      const { forceSyncUserSubscription } = await import(
+        "@/lib/subscription-sync"
+      );
+      const syncResult = await forceSyncUserSubscription(user.id);
+
+      if (syncResult.success && syncResult.subscription) {
+        // Re-fetch the updated profile after sync
+        const { data: updatedProfile } = await supabase
+          .from("stripe_step_by_step_profiles")
+          .select(
+            "billing_email, stripe_customer_id, subscription_status, subscription_price_id, subscription_current_period_end"
+          )
+          .eq("id", user.id)
+          .single();
+
+        subscription = getSubscriptionInfo(
+          updatedProfile || {
+            subscription_status: null,
+            subscription_price_id: null,
+            subscription_current_period_end: null,
+          }
+        );
+      }
+    } catch (error) {
+      // If sync fails, continue with existing data
+      console.warn("Auto-sync failed, using cached data:", error);
+    }
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
           Welcome back, {user.email?.split("@")[0]}!
         </h1>
-        <p className="text-gray-600 dark:text-gray-300">
+        <p className="text-gray-600 dark:text-gray-300 mb-4">
           Here's an overview of your account and subscription status.
         </p>
+
+        {/* Subscription Status */}
+        <div className="mb-6">
+          <SubscriptionBadge subscription={subscription} showDetails={true} />
+        </div>
+
+        {/* Educational Message */}
+        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700 rounded-lg p-4 mb-8">
+          <div className="flex items-start">
+            <svg
+              className="w-5 h-5 text-indigo-600 dark:text-indigo-400 mr-2 mt-0.5 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <div>
+              <h4 className="text-sm font-medium text-indigo-900 dark:text-indigo-100 mb-1">
+                Subscription Status
+              </h4>
+              <p className="text-sm text-indigo-700 dark:text-indigo-300">
+                {getEducationalMessage(subscription.planTier)}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -117,23 +193,26 @@ export default async function DashboardPage() {
               Subscription
             </h2>
           </div>
-          <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-            {profile?.subscription_status ? (
-              <span className="capitalize">{profile.subscription_status}</span>
-            ) : (
-              "No active subscription"
-            )}
-          </p>
-          {profile?.subscription_status === "active" && (
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Next billing:{" "}
-              {profile.subscription_current_period_end
-                ? new Date(
-                    profile.subscription_current_period_end
-                  ).toLocaleDateString()
-                : "N/A"}
+          <div className="space-y-2">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Plan:{" "}
+              <span className="font-medium capitalize">
+                {subscription.planTier}
+              </span>
             </p>
-          )}
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Status:{" "}
+              <span className="font-medium capitalize">
+                {subscription.status || "None"}
+              </span>
+            </p>
+            {subscription.isActive && subscription.currentPeriodEnd && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Next billing:{" "}
+                {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Quick Actions Card */}
@@ -211,6 +290,11 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Feature Cards Section */}
+      <div className="mt-8">
+        <FeatureCards currentTier={subscription.planTier} showUpgrade={true} />
       </div>
     </div>
   );

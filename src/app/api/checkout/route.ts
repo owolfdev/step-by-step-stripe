@@ -112,6 +112,54 @@ export async function POST(req: NextRequest) {
       })
     );
 
+    // Check for existing active subscriptions and cancel them
+    if (mode === "subscription") {
+      try {
+        const existingSubscriptions = await stripe.subscriptions.list({
+          customer: customerId,
+          status: "active",
+          limit: 10,
+        });
+
+        if (existingSubscriptions.data.length > 0) {
+          logger.info(
+            "Found existing active subscriptions, cancelling them",
+            createLogContext({
+              userId: user.id,
+              stripeCustomerId: customerId,
+              existingCount: existingSubscriptions.data.length,
+              operation: "subscription_cleanup",
+            })
+          );
+
+          // Cancel all existing active subscriptions
+          for (const subscription of existingSubscriptions.data) {
+            await stripe.subscriptions.cancel(subscription.id);
+            logger.info(
+              "Cancelled existing subscription",
+              createLogContext({
+                userId: user.id,
+                stripeCustomerId: customerId,
+                cancelledSubscriptionId: subscription.id,
+                operation: "subscription_cancellation",
+              })
+            );
+          }
+        }
+      } catch (err) {
+        logger.error(
+          "Failed to check/cancel existing subscriptions",
+          createLogContext({
+            userId: user.id,
+            stripeCustomerId: customerId,
+            operation: "subscription_cleanup_error",
+          }),
+          err instanceof Error ? err : new Error(String(err))
+        );
+        // Continue with checkout even if cleanup fails
+      }
+    }
+
     // Create Checkout Session
     const session = await stripe.checkout.sessions.create({
       mode, // "subscription" | "payment"
