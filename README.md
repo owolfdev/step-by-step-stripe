@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Plan: Stripe + Next.js (Vercel) + Supabase
 
-## Getting Started
+1. Create a fresh **Next.js 15** app (TypeScript, App Router).
+2. Install dependencies: `stripe`, `@supabase/supabase-js`, `zod` (and `stripe-cli` for local testing).
+3. Add **`.env.local`** with Stripe + Supabase keys and base URLs.
+4. Create tiny helpers: **`lib/stripe.ts`** (Stripe server SDK) and **`lib/supabase.ts`** (server/client).
+5. Wire **Supabase Auth** in Next.js (server-side session access).
+6. Prepare **Supabase schema**:
 
-First, run the development server:
+   - Extend `profiles` with Stripe columns.
+   - Create `payments` log table.
+   - Enable RLS + minimal policies.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+7. Build minimal **UI pages**:
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+   - `/pricing` (buttons for one-time + subscription).
+   - `/billing` (status + “Manage billing” portal link).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+8. Add **API routes**:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   - `POST /api/checkout` (creates Checkout Session; payment/subscription).
+   - `POST /api/portal` (opens Customer Portal).
 
-## Learn More
+9. Add **webhook endpoint**:
 
-To learn more about Next.js, take a look at the following resources:
+   - `POST /api/webhooks/stripe` (Node runtime, raw body).
+   - Handle `checkout.session.completed`, `customer.subscription.*`, `invoice.*`.
+   - Upsert to Supabase (`profiles`, `payments`) with service role key.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+10. Run **Stripe CLI** locally:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+    - `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
+    - Capture `STRIPE_WEBHOOK_SECRET`.
 
-## Deploy on Vercel
+11. **Test flows** (dev):
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+    - Trigger test events; complete a test checkout; verify DB updates.
+    - Check Stripe Dashboard → Events/Logs.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+12. Add a simple **Admin/Diagnostics page** (e.g., `/admin/billing`):
+
+    - Show current user profile Stripe fields.
+    - List recent `payments` table entries.
+    - Show last 20 webhook deliveries (from DB) + statuses.
+
+13. Add **logging/observability**:
+
+    - Server-side `console` logs with event type + IDs.
+    - Ensure unique `stripe_event_id` to de-dupe.
+    - Note where to check: Vercel Logs, Stripe Logs, Supabase query logs.
+
+14. Gate **Pro features** in UI:
+
+    - Read `subscription_status` to enable/disable features.
+
+15. **Error handling** touchups:
+
+    - Clear 401s for unauthenticated routes.
+    - Defensive checks for missing customer/price IDs.
+
+16. **Production deploy** to Vercel:
+
+    - Set all env vars on Vercel.
+    - Point Stripe live webhooks to your deployed endpoint.
+
+17. Optional enhancements:
+
+    - Product/price sync scripts.
+    - Tax settings, coupons, trials.
+    - Email notifications on invoice failures.
