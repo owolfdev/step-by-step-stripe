@@ -9,15 +9,23 @@ export default async function AuthButton() {
 
   if (user) {
     return (
-      <div className="flex items-center gap-3">
-        <span className="text-sm opacity-80">Signed in as {user.email}</span>
+      <div className="flex items-center gap-4">
+        <span className="text-sm text-gray-600 dark:text-gray-300">
+          Signed in as{" "}
+          <span className="font-medium text-indigo-600 dark:text-indigo-400">
+            {user.email}
+          </span>
+        </span>
         <LogoutButton />
       </div>
     );
   }
 
   return (
-    <a className="rounded px-3 py-1 border" href="/login">
+    <a
+      className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+      href="/login"
+    >
       Log in / Sign up
     </a>
   );

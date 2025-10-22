@@ -2,32 +2,9 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      {/* Header */}
-      <header className="container mx-auto px-6 py-8">
-        <nav className="flex justify-between items-center">
-          <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-            StripePay
-          </div>
-          <div className="flex gap-6">
-            <Link
-              href="/login"
-              className="text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-            >
-              Login
-            </Link>
-            <Link
-              href="/pricing"
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              Get Started
-            </Link>
-          </div>
-        </nav>
-      </header>
-
+    <div className="min-h-screen">
       {/* Hero Section */}
-      <main className="container mx-auto px-6 py-16">
+      <div className="container mx-auto px-6 py-16">
         <div className="text-center max-w-4xl mx-auto">
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 dark:text-white mb-6">
             Seamless Payments with{" "}
@@ -76,8 +53,8 @@ export default function Home() {
                 Secure Payments
               </h3>
               <p className="text-gray-600 dark:text-gray-300">
-                One-time payments and subscriptions powered by Stripe's secure
-                infrastructure.
+                One-time payments and subscriptions powered by Stripe&apos;s
+                secure infrastructure.
               </p>
             </div>
 
@@ -132,30 +109,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="container mx-auto px-6 py-8 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex flex-col md:flex-row justify-between items-center">
-          <div className="text-gray-600 dark:text-gray-400 mb-4 md:mb-0">
-            © 2024 StripePay. Built with Next.js, Stripe, and Supabase.
-          </div>
-          <div className="flex gap-6">
-            <Link
-              href="/admin/billing"
-              className="text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-            >
-              Admin
-            </Link>
-            <Link
-              href="/billing"
-              className="text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-            >
-              Billing
-            </Link>
-          </div>
-        </div>
-      </footer>
+      </div>
     </div>
   );
 }
