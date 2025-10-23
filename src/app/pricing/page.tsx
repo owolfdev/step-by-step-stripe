@@ -1,44 +1,55 @@
 // src/app/pricing/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { PlanData, formatPrice, stripProductPrefix } from "@/types/pricing";
+import StoreSelector from "@/components/store-selector";
 
 export default function PricingPage() {
   const [loading, setLoading] = useState<string | null>(null);
+  const [plans, setPlans] = useState<PlanData[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [plansError, setPlansError] = useState<string | null>(null);
+  const [currentStore, setCurrentStore] = useState<string>("default");
+  const [availableStores, setAvailableStores] = useState<
+    Array<{
+      storeId: string;
+      storeName: string;
+      appName: string;
+    }>
+  >([]);
 
-  const plans = [
-    {
-      name: "Baby",
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BABY!,
-      desc: "Entry plan",
-      features: ["Basic features", "Email support", "Standard usage"],
-      popular: false,
-    },
-    {
-      name: "Premium",
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PREMIUM!,
-      desc: "Standard plan",
-      features: [
-        "All Baby features",
-        "Priority support",
-        "Advanced analytics",
-        "API access",
-      ],
-      popular: true,
-    },
-    {
-      name: "Pro",
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO!,
-      desc: "All features",
-      features: [
-        "All Premium features",
-        "24/7 phone support",
-        "Custom integrations",
-        "White-label options",
-      ],
-      popular: false,
-    },
-  ];
+  // Fetch live pricing data
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        setPlansLoading(true);
+        const url =
+          currentStore === "default"
+            ? "/api/pricing"
+            : `/api/pricing?store=${currentStore}`;
+
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error("Failed to fetch pricing data");
+        }
+        const data = await response.json();
+        setPlans(data.plans);
+
+        // Set available stores if provided
+        if (data.availableStores) {
+          setAvailableStores(data.availableStores);
+        }
+      } catch (error) {
+        console.error("Error fetching plans:", error);
+        setPlansError("Failed to load pricing information");
+      } finally {
+        setPlansLoading(false);
+      }
+    };
+
+    fetchPlans();
+  }, [currentStore]);
 
   const startCheckout = async (priceId: string) => {
     setLoading(priceId);
@@ -52,6 +63,65 @@ export default function PricingPage() {
     setLoading(null);
   };
 
+  // Loading state
+  if (plansLoading) {
+    return (
+      <div className="max-w-6xl mx-auto">
+        <div className="text-center mb-16">
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
+            Choose Your Plan
+          </h1>
+          <p className="text-xl text-gray-600 dark:text-gray-300">
+            Loading pricing information...
+          </p>
+        </div>
+        <div className="grid gap-8 md:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 animate-pulse"
+            >
+              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded mb-4"></div>
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded mb-4"></div>
+              <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded mb-8"></div>
+              <div className="space-y-3 mb-8">
+                {[1, 2, 3, 4].map((j) => (
+                  <div
+                    key={j}
+                    className="h-4 bg-gray-200 dark:bg-gray-700 rounded"
+                  ></div>
+                ))}
+              </div>
+              <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (plansError) {
+    return (
+      <div className="max-w-6xl mx-auto">
+        <div className="text-center mb-16">
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-4">
+            Choose Your Plan
+          </h1>
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
+            <p className="text-red-600 dark:text-red-400 mb-4">{plansError}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <div className="text-center mb-16">
@@ -64,10 +134,19 @@ export default function PricingPage() {
         </p>
       </div>
 
+      {/* Store Selector */}
+      {availableStores.length > 0 && (
+        <StoreSelector
+          currentStore={currentStore}
+          onStoreChange={setCurrentStore}
+          availableStores={availableStores}
+        />
+      )}
+
       <div className="grid gap-8 md:grid-cols-3">
         {plans.map((plan, index) => (
           <div
-            key={plan.priceId}
+            key={plan.price.id}
             className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 flex flex-col ${
               plan.popular
                 ? "ring-2 ring-indigo-600 dark:ring-indigo-400 transform scale-105"
@@ -84,11 +163,14 @@ export default function PricingPage() {
 
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                {plan.name}
+                {stripProductPrefix(plan.product.name)}
               </h2>
               <p className="text-gray-600 dark:text-gray-300 mb-4">
-                {plan.desc}
+                {plan.product.description}
               </p>
+              <div className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+                {formatPrice(plan.price)}
+              </div>
             </div>
 
             <div className="flex-1 mb-8">
@@ -122,10 +204,10 @@ export default function PricingPage() {
                   ? "bg-indigo-600 text-white hover:bg-indigo-700"
                   : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600"
               }`}
-              onClick={() => startCheckout(plan.priceId)}
-              disabled={loading === plan.priceId}
+              onClick={() => startCheckout(plan.price.id)}
+              disabled={loading === plan.price.id}
             >
-              {loading === plan.priceId ? "Redirecting…" : "Subscribe"}
+              {loading === plan.price.id ? "Redirecting…" : "Subscribe"}
             </button>
           </div>
         ))}
