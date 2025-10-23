@@ -1,70 +1,139 @@
-# Plan: Stripe + Next.js (Vercel) + Supabase
+# StripePay - Complete Payment Solution
 
-1. Create a fresh **Next.js 15** app (TypeScript, App Router).
-2. Install dependencies: `stripe`, `@supabase/supabase-js`, `zod` (and `stripe-cli` for local testing).
-3. Add **`.env.local`** with Stripe + Supabase keys and base URLs.
-4. Create tiny helpers: **`lib/stripe.ts`** (Stripe server SDK) and **`lib/supabase.ts`** (server/client).
-5. Wire **Supabase Auth** in Next.js (server-side session access).
-6. Prepare **Supabase schema**:
+A modern, full-stack payment application built with Next.js 15, Stripe, and Supabase that demonstrates best practices for handling payments, subscriptions, and billing management.
 
-   - Extend `profiles` with Stripe columns.
-   - Create `payments` log table.
-   - Enable RLS + minimal policies.
+## 🚀 Features
 
-7. Build minimal **UI pages**:
+### Core Payment Features
 
-   - `/pricing` (buttons for one-time + subscription).
-   - `/billing` (status + “Manage billing” portal link).
+- **One-time Payments** - Secure payment processing with Stripe Checkout
+- **Subscription Management** - Recurring billing with multiple subscription tiers
+- **Billing Portal** - Self-service billing management via Stripe Customer Portal
+- **Multi-store Support** - Handle multiple stores with different pricing configurations
 
-8. Add **API routes**:
+### User Management
 
-   - `POST /api/checkout` (creates Checkout Session; payment/subscription).
-   - `POST /api/portal` (opens Customer Portal).
+- **Authentication** - User authentication and session management with Supabase
+- **User Dashboard** - Personalized dashboard with subscription status and billing info
+- **Profile Management** - User profile and account management
 
-9. Add **webhook endpoint**:
+### Developer Features
 
-   - `POST /api/webhooks/stripe` (Node runtime, raw body).
-   - Handle `checkout.session.completed`, `customer.subscription.*`, `invoice.*`.
-   - Upsert to Supabase (`profiles`, `payments`) with service role key.
+- **Webhook Integration** - Real-time payment event handling
+- **Environment Configuration** - Flexible environment setup for development and production
+- **Advanced Filtering** - Client-side filtering for pricing and subscription data
+- **Error Handling** - Comprehensive error handling and logging
+- **TypeScript** - Full type safety throughout the application
 
-10. Run **Stripe CLI** locally:
+## 🛠 Tech Stack
 
-    - `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
-    - Capture `STRIPE_WEBHOOK_SECRET`.
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
+- **Backend**: Next.js API Routes, Server Actions
+- **Payments**: Stripe (payments, subscriptions, webhooks)
+- **Database**: Supabase (authentication, user data)
+- **Styling**: Tailwind CSS with dark mode support
 
-11. **Test flows** (dev):
+## 📁 Project Structure
 
-    - Trigger test events; complete a test checkout; verify DB updates.
-    - Check Stripe Dashboard → Events/Logs.
+```
+src/
+├── app/                    # Next.js 15 app router
+│   ├── api/               # API routes
+│   │   ├── checkout/      # Payment processing
+│   │   ├── webhooks/      # Stripe webhook handlers
+│   │   └── pricing/       # Pricing API endpoints
+│   ├── admin/             # Admin panel
+│   ├── billing/           # Billing management
+│   ├── dashboard/         # User dashboard
+│   └── pricing/           # Pricing page
+├── components/            # Reusable UI components
+├── lib/                   # Utility functions and configurations
+│   ├── actions/           # Server actions
+│   ├── supabase/          # Supabase client configurations
+│   └── stripe.ts          # Stripe configuration
+└── types/                 # TypeScript type definitions
+```
 
-12. Add a simple **Admin/Diagnostics page** (e.g., `/admin/billing`):
+## 🚀 Getting Started
 
-    - Show current user profile Stripe fields.
-    - List recent `payments` table entries.
-    - Show last 20 webhook deliveries (from DB) + statuses.
+### Prerequisites
 
-13. Add **logging/observability**:
+- Node.js 18+
+- Stripe account
+- Supabase project
 
-    - Server-side `console` logs with event type + IDs.
-    - Ensure unique `stripe_event_id` to de-dupe.
-    - Note where to check: Vercel Logs, Stripe Logs, Supabase query logs.
+### Installation
 
-14. Gate **Pro features** in UI:
+1. Clone the repository
 
-    - Read `subscription_status` to enable/disable features.
+```bash
+git clone <repository-url>
+cd stripe-step-by-step
+```
 
-15. **Error handling** touchups:
+2. Install dependencies
 
-    - Clear 401s for unauthenticated routes.
-    - Defensive checks for missing customer/price IDs.
+```bash
+npm install
+```
 
-16. **Production deploy** to Vercel:
+3. Set up environment variables
 
-    - Set all env vars on Vercel.
-    - Point Stripe live webhooks to your deployed endpoint.
+```bash
+cp .env.example .env.local
+```
 
-17. Optional enhancements:
+Configure the following environment variables:
 
-    - Product/price sync scripts.
-    - Tax settings, coupons, trials.
-    - Email notifications on invoice failures.
+- `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Your Supabase anonymous key
+- `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key
+- `STRIPE_SECRET_KEY` - Your Stripe secret key
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` - Your Stripe publishable key
+- `STRIPE_WEBHOOK_SECRET` - Your Stripe webhook secret
+
+4. Run the development server
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to view the application.
+
+## 🔧 Configuration
+
+### Stripe Setup
+
+1. Create products and prices in your Stripe dashboard
+2. Set up webhooks pointing to `/api/webhooks/stripe`
+3. Configure the Stripe Customer Portal
+
+### Supabase Setup
+
+1. Create a new Supabase project
+2. Set up authentication providers
+3. Configure database tables for user data
+
+## 📚 Documentation
+
+- [Environment Configuration](docs/environment-configuration.md)
+- [Multi-store Setup](docs/multi-store-setup.md)
+- [Stripe Metadata Setup](docs/stripe-metadata-setup.md)
+- [Logging & Observability](docs/logging-observability.md)
+- [Supabase Auth with Next.js 15](docs/supabase-auth-nextjs15-guide.md)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+## 🆘 Support
+
+For support and questions, please open an issue in the repository or contact the development team.
