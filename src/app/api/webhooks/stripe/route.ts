@@ -2,36 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabase/admin"; // service-role client
 import { logger, createLogContext } from "@/lib/logging";
+import { Errors, handleApiError } from "@/lib/error-handling";
 import Stripe from "stripe";
 
 export const runtime = "nodejs"; // required for Stripe SDK
 export const dynamic = "force-dynamic"; // make sure body isn't cached
 
 export async function POST(req: NextRequest) {
-  const sig = req.headers.get("stripe-signature");
-  if (!sig) {
-    logger.warn("Webhook request missing signature", {
-      operation: "webhook_validation",
-    });
-    return new NextResponse("Missing signature", { status: 400 });
-  }
-
-  const rawBody = await req.text();
-
-  let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(
-      rawBody,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
-  } catch (err: unknown) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    logger.webhookError("signature_verification", "unknown", error, {
-      operation: "webhook_validation",
-    });
-    return new NextResponse("Invalid signature", { status: 400 });
-  }
+    const sig = req.headers.get("stripe-signature");
+    if (!sig) {
+      throw Errors.createError(
+        "STRIPE_WEBHOOK_INVALID",
+        "Webhook request missing signature",
+        "Invalid webhook request",
+        400
+      );
+    }
+
+    const rawBody = await req.text();
+
+    let event: Stripe.Event;
+    try {
+      event = stripe.webhooks.constructEvent(
+        rawBody,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET!
+      );
+    } catch (err: unknown) {
+      throw Errors.createError(
+        "STRIPE_WEBHOOK_INVALID",
+        "Invalid webhook signature",
+        "Invalid webhook request",
+        400,
+        { originalError: err }
+      );
+    }
 
   // Check for duplicate events using stripe_event_id
   try {
@@ -555,11 +561,10 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ received: true });
-  } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    logger.webhookError("processing", event.id, error, {
+  } catch (error) {
+    return handleApiError(error, {
       operation: "webhook_error",
+      endpoint: "/api/webhooks/stripe",
     });
-    return new NextResponse("Webhook handler error", { status: 500 });
   }
 }

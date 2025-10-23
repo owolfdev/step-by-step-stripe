@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createServerClientWithCookies } from "@/lib/supabase/server";
 import { logger, createLogContext } from "@/lib/logging";
+import { Errors, handleApiError } from "@/lib/error-handling";
 
 export const runtime = "nodejs";
 
@@ -17,10 +18,9 @@ export async function POST(_req: NextRequest) {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      logger.warn("Unauthorized portal access attempt", {
-        operation: "portal_auth",
-      });
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      throw Errors.unauthorized(
+        "User must be logged in to access billing portal"
+      );
     }
 
     logger.info(
@@ -39,30 +39,11 @@ export async function POST(_req: NextRequest) {
       .single();
 
     if (error) {
-      logger.databaseError(
-        "select",
-        "stripe_step_by_step_profiles",
-        error,
-        createLogContext({
-          userId: user.id,
-          operation: "portal_profile_lookup",
-        })
-      );
-      throw error;
+      throw Errors.databaseError("select_profile", error);
     }
 
     if (!profile?.stripe_customer_id) {
-      logger.warn(
-        "No Stripe customer found for user",
-        createLogContext({
-          userId: user.id,
-          operation: "portal_customer_lookup",
-        })
-      );
-      return NextResponse.json(
-        { error: "No Stripe customer found for user" },
-        { status: 400 }
-      );
+      throw Errors.stripeCustomerNotFound("No Stripe customer found for user");
     }
 
     logger.info(
@@ -78,10 +59,15 @@ export async function POST(_req: NextRequest) {
       process.env.STRIPE_CUSTOMER_PORTAL_RETURN_URL ||
       `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/billing`;
 
-    const portal = await stripe.billingPortal.sessions.create({
-      customer: profile.stripe_customer_id,
-      return_url: returnUrl,
-    });
+    let portal;
+    try {
+      portal = await stripe.billingPortal.sessions.create({
+        customer: profile.stripe_customer_id,
+        return_url: returnUrl,
+      });
+    } catch (error) {
+      throw Errors.stripeError("create_billing_portal_session", error);
+    }
 
     logger.stripeOperation(
       "create_billing_portal_session",
@@ -95,14 +81,10 @@ export async function POST(_req: NextRequest) {
     );
 
     return NextResponse.json({ url: portal.url });
-  } catch (err: unknown) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    logger.apiError("POST", "/api/portal", error, {
+  } catch (error) {
+    return handleApiError(error, {
       operation: "portal_error",
+      endpoint: "/api/portal",
     });
-    return NextResponse.json(
-      { error: "Failed to create portal session" },
-      { status: 500 }
-    );
   }
 }

@@ -4,6 +4,12 @@ import { stripe } from "@/lib/stripe";
 import { createServerClientWithCookies } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { logger, createLogContext } from "@/lib/logging";
+import {
+  Errors,
+  validateRequiredFields,
+  validatePriceId,
+  handleApiError,
+} from "@/lib/error-handling";
 
 export const runtime = "nodejs"; // ensure Node runtime (not Edge)
 
@@ -67,23 +73,26 @@ export async function POST(req: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      logger.warn("Unauthorized checkout attempt", {
-        operation: "checkout_auth",
-      });
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      throw Errors.unauthorized(
+        "User must be logged in to create checkout session"
+      );
     }
 
-    const { priceId, mode = "subscription" } = (await req.json()) as Body;
-    if (!priceId) {
-      logger.warn(
-        "Missing priceId in checkout request",
-        createLogContext({
-          userId: user.id,
-          operation: "checkout_validation",
-        })
-      );
-      return NextResponse.json({ error: "Missing priceId" }, { status: 400 });
+    // Parse and validate request body
+    let requestBody: Body;
+    try {
+      requestBody = await req.json();
+    } catch (error) {
+      throw Errors.invalidInput("Invalid JSON in request body");
     }
+
+    const { priceId, mode = "subscription" } = requestBody;
+
+    // Validate required fields
+    validateRequiredFields({ priceId }, ["priceId"]);
+
+    // Validate price ID
+    validatePriceId(priceId);
 
     logger.info(
       "Creating checkout session",
@@ -98,10 +107,15 @@ export async function POST(req: NextRequest) {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
     // Ensure we have a Stripe customer for this user
-    const customerId = await getOrCreateCustomer({
-      userId: user.id,
-      email: user.email ?? null,
-    });
+    let customerId: string;
+    try {
+      customerId = await getOrCreateCustomer({
+        userId: user.id,
+        email: user.email ?? null,
+      });
+    } catch (error) {
+      throw Errors.stripeError("create_customer", error);
+    }
 
     logger.info(
       "Customer ID obtained/created",
@@ -134,16 +148,29 @@ export async function POST(req: NextRequest) {
 
           // Cancel all existing active subscriptions
           for (const subscription of existingSubscriptions.data) {
-            await stripe.subscriptions.cancel(subscription.id);
-            logger.info(
-              "Cancelled existing subscription",
-              createLogContext({
-                userId: user.id,
-                stripeCustomerId: customerId,
-                cancelledSubscriptionId: subscription.id,
-                operation: "subscription_cancellation",
-              })
-            );
+            try {
+              await stripe.subscriptions.cancel(subscription.id);
+              logger.info(
+                "Cancelled existing subscription",
+                createLogContext({
+                  userId: user.id,
+                  stripeCustomerId: customerId,
+                  cancelledSubscriptionId: subscription.id,
+                  operation: "subscription_cancellation",
+                })
+              );
+            } catch (cancelError) {
+              logger.warn(
+                "Failed to cancel existing subscription",
+                createLogContext({
+                  userId: user.id,
+                  stripeCustomerId: customerId,
+                  cancelledSubscriptionId: subscription.id,
+                  operation: "subscription_cancellation_failed",
+                })
+              );
+              // Continue with other cancellations
+            }
           }
         }
       } catch (err) {
@@ -161,16 +188,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Create Checkout Session
-    const session = await stripe.checkout.sessions.create({
-      mode, // "subscription" | "payment"
-      customer: customerId,
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${siteUrl}/billing?status=success`,
-      cancel_url: `${siteUrl}/billing?status=cancelled`,
-      allow_promotion_codes: true,
-      billing_address_collection: "auto",
-      // automatic_tax: { enabled: true }, // enable later if you need Stripe Tax
-    });
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        mode, // "subscription" | "payment"
+        customer: customerId,
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${siteUrl}/billing?status=success`,
+        cancel_url: `${siteUrl}/billing?status=cancelled`,
+        allow_promotion_codes: true,
+        billing_address_collection: "auto",
+        // automatic_tax: { enabled: true }, // enable later if you need Stripe Tax
+      });
+    } catch (error) {
+      throw Errors.stripeError("create_checkout_session", error);
+    }
 
     logger.stripeOperation(
       "create_checkout_session",
@@ -185,14 +217,10 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ url: session.url });
-  } catch (err: unknown) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    logger.apiError("POST", "/api/checkout", error, {
+  } catch (error) {
+    return handleApiError(error, {
       operation: "checkout_error",
+      endpoint: "/api/checkout",
     });
-    return NextResponse.json(
-      { error: "Failed to create checkout" },
-      { status: 500 }
-    );
   }
 }
