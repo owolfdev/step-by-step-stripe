@@ -28,7 +28,7 @@ async function getOrCreateCustomer({
   // Read (and possibly update) via RLS-enabled user client
   const supabase = await createServerClientWithCookies();
 
-  // 1) Read existing customer id
+  // 1) Read existing customer id from our database
   const { data: profile, error: readErr } = await supabase
     .from("stripe_step_by_step_profiles")
     .select("stripe_customer_id")
@@ -40,13 +40,49 @@ async function getOrCreateCustomer({
     return profile.stripe_customer_id as string;
   }
 
-  // 2) Create in Stripe
+  // 2) Check if customer already exists in Stripe by email
+  if (email) {
+    try {
+      const existingCustomers = await stripe.customers.list({
+        email: email,
+        limit: 1,
+      });
+
+      if (existingCustomers.data.length > 0) {
+        const existingCustomer = existingCustomers.data[0];
+
+        // Store the existing customer ID in our database
+        const { error: upsertErr } = await supabaseAdmin
+          .from("stripe_step_by_step_profiles")
+          .upsert({
+            id: userId,
+            stripe_customer_id: existingCustomer.id,
+            billing_email: email,
+            subscription_status: null,
+            subscription_price_id: null,
+            subscription_current_period_end: null,
+          });
+
+        if (upsertErr) throw upsertErr;
+        return existingCustomer.id;
+      }
+    } catch (error) {
+      // If lookup fails, continue with creating new customer
+      logger.warn("Failed to lookup existing customer by email", {
+        operation: "customer_lookup",
+        email,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // 3) Create new customer in Stripe
   const customer = await stripe.customers.create({
     email: email ?? undefined,
     metadata: { supabase_user_id: userId },
   });
 
-  // 3) Upsert to profiles table using admin client (bypasses RLS)
+  // 4) Store customer ID in our database
   const { error: upsertErr } = await supabaseAdmin
     .from("stripe_step_by_step_profiles")
     .upsert({
