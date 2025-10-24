@@ -1,5 +1,5 @@
 // src/app/api/portal/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { createServerClientWithCookies } from "@/lib/supabase/server";
 import { logger, createLogContext } from "@/lib/logging";
@@ -7,7 +7,7 @@ import { Errors, handleApiError } from "@/lib/error-handling";
 
 export const runtime = "nodejs";
 
-export async function POST(_req: NextRequest) {
+export async function POST() {
   try {
     logger.apiRequest("POST", "/api/portal", { operation: "portal_start" });
 

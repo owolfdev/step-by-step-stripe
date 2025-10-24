@@ -1,11 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createServerClientWithCookies } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe";
 import { logger, createLogContext } from "@/lib/logging";
+import Stripe from "stripe";
 
 export const runtime = "nodejs";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     logger.apiRequest("GET", "/api/debug-stripe", {
       operation: "debug_stripe_start",
@@ -59,14 +60,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       customer: {
         id: customer.id,
-        email: (customer as any).email,
-        created: (customer as any).created,
+        email: (customer as Stripe.Customer).email,
+        created: (customer as Stripe.Customer).created,
       },
       subscriptions: subscriptions.data.map((sub) => ({
         id: sub.id,
         status: sub.status,
-        current_period_start: sub.current_period_start,
-        current_period_end: sub.current_period_end,
+        current_period_start: (sub as unknown as Record<string, unknown>)
+          .current_period_start,
+        current_period_end: (sub as unknown as Record<string, unknown>)
+          .current_period_end,
         price_id: sub.items?.data?.[0]?.price?.id,
         amount: sub.items?.data?.[0]?.price?.unit_amount,
         currency: sub.items?.data?.[0]?.price?.currency,

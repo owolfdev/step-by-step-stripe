@@ -3,7 +3,6 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getLivePlanData } from "@/lib/stripe-pricing";
 import { handleApiError } from "@/lib/error-handling";
 import { logger } from "@/lib/logging";
 import { config } from "@/lib/config";

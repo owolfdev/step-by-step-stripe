@@ -223,7 +223,7 @@ export function validatePriceId(priceId: string): void {
 }
 
 // Safe async wrapper for API routes
-export function withErrorHandling<T extends any[], R>(
+export function withErrorHandling<T extends unknown[]>(
   handler: (...args: T) => Promise<NextResponse>,
   context?: Record<string, unknown>
 ) {

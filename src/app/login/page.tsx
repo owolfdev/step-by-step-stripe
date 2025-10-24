@@ -142,8 +142,8 @@ export default function LoginPage() {
           <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
             <p className="text-xs text-blue-600 dark:text-blue-400">
               <strong>Development tip:</strong> For local development, you can
-              temporarily disable "Email confirmations" in Supabase Auth →
-              Providers.
+              temporarily disable &quot;Email confirmations&quot; in Supabase
+              Auth → Providers.
             </p>
           </div>
         </div>

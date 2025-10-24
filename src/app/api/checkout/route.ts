@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     let requestBody: Body;
     try {
       requestBody = await req.json();
-    } catch (error) {
+    } catch {
       throw Errors.invalidInput("Invalid JSON in request body");
     }
 
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
                   operation: "subscription_cancellation",
                 })
               );
-            } catch (cancelError) {
+            } catch {
               logger.warn(
                 "Failed to cancel existing subscription",
                 createLogContext({

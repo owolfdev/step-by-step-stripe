@@ -39,7 +39,8 @@ export async function getActiveStripeSubscriptions(
         id: sub.id,
         status: sub.status,
         priceId,
-        currentPeriodEnd: sub.current_period_end,
+        currentPeriodEnd: (sub as unknown as Record<string, unknown>)
+          .current_period_end as number,
         tier,
         priority,
       };

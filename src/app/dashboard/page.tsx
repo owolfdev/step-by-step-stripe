@@ -104,7 +104,7 @@ export default async function DashboardPage() {
           Welcome back, {user.email?.split("@")[0]}!
         </h1>
         <p className="text-gray-600 dark:text-gray-300 mb-4">
-          Here's an overview of your account and subscription status.
+          Here&apos;s an overview of your account and subscription status.
         </p>
 
         {/* Subscription Status */}

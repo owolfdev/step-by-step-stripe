@@ -177,8 +177,15 @@ export function mapStripeDataToPlans(
   }
 
   // Sort by tier priority
-  const tierPriority = { baby: 1, premium: 2, pro: 3 };
-  plans.sort((a, b) => tierPriority[a.tier] - tierPriority[b.tier]);
+  const tierPriority: Record<string, number> = {
+    free: 0,
+    baby: 1,
+    premium: 2,
+    pro: 3,
+  };
+  plans.sort(
+    (a, b) => (tierPriority[a.tier] || 0) - (tierPriority[b.tier] || 0)
+  );
 
   logger.info("Successfully mapped app-specific plans", {
     operation: "app_plan_mapping_success",
