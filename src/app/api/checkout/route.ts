@@ -68,14 +68,27 @@ export async function POST(req: NextRequest) {
 
     const supabase = await createServerClientWithCookies();
 
-    // Auth check
+    // Auth check with detailed logging
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
-    if (!user) {
-      throw Errors.unauthorized(
-        "User must be logged in to create checkout session"
-      );
+
+    logger.info("Authentication check", {
+      operation: "auth_check",
+      hasUser: !!user,
+      userId: user?.id,
+      userEmail: user?.email,
+      authError: authError?.message,
+    });
+
+    if (authError || !user) {
+      logger.warn("Authentication failed", {
+        operation: "auth_failed",
+        authError: authError?.message,
+        hasUser: !!user,
+      });
+      throw Errors.unauthorized("Please log in to continue");
     }
 
     // Parse and validate request body

@@ -30,7 +30,7 @@ export async function middleware(req: NextRequest) {
   return res;
 }
 
-// Only run on app pages (avoid static files)
+// Only run on app pages (avoid static files and webhooks)
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|api/webhooks).*)"],
 };

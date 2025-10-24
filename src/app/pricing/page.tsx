@@ -57,6 +57,7 @@ export default function PricingPage() {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // This ensures cookies are sent with the request
         body: JSON.stringify({ priceId, mode: "subscription" }),
       });
 
