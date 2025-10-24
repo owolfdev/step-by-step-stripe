@@ -53,14 +53,36 @@ export default function PricingPage() {
 
   const startCheckout = async (priceId: string) => {
     setLoading(priceId);
-    const res = await fetch("/api/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ priceId, mode: "subscription" }),
-    });
-    const { url } = await res.json();
-    if (url) window.location.href = url;
-    setLoading(null);
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId, mode: "subscription" }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        if (res.status === 401) {
+          // Show login prompt instead of immediate redirect
+          const shouldLogin = confirm(
+            "You need to log in to subscribe. Would you like to go to the login page?"
+          );
+          if (shouldLogin) {
+            window.location.href = "/login";
+          }
+          return;
+        }
+        throw new Error(errorData.error || "Checkout failed");
+      }
+
+      const { url } = await res.json();
+      if (url) window.location.href = url;
+    } catch (error) {
+      console.error("Checkout error:", error);
+      alert("Checkout failed. Please try again or log in first.");
+    } finally {
+      setLoading(null);
+    }
   };
 
   // Loading state
