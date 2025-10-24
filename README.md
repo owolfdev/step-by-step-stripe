@@ -1,6 +1,6 @@
 # StripePay - Complete Payment Solution
 
-A modern, full-stack payment application built with Next.js 15, Stripe, and Supabase that demonstrates best practices for handling payments, subscriptions, and billing management.
+A modern, full-stack payment application built with Next.js 15.x, Stripe, and Supabase that demonstrates best practices for handling payments, subscriptions, and billing management.
 
 ## 🚀 Features
 
